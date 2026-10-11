@@ -1,0 +1,788 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Battlefront Conquest Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: holotable — galaxy chart fills the left, a command console docks right (stacks on phones). Single deliberate dark look. */
+:root{
+  color-scheme: dark;
+  --bg:#0a1018; --panel:#101a26; --panel2:#152232; --line:#24364b; --line2:#2f4660;
+  --fg:#dbe5ef; --muted:#8597ab; --faint:#5b6d82;
+  --accent:#f0b44c;          /* holotable amber: selection + calls to action */
+  --you:#4ea8e8; --foe:#e2604f; --neutral:#6f7c8c;
+  --win:#5cc28a; --loss:#e2604f;
+  --display:"Chakra Petch", "Segoe UI", system-ui, sans-serif;
+  --body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg);color:var(--fg)}
+body{font-family:var(--body);font-size:14px;line-height:1.5;padding-inline:16px;padding-block:12px 24px}
+button,select,input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.app{max-width:1320px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+
+/* header */
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px;padding-block:6px}
+.brand{font-family:var(--display);font-weight:700;font-size:20px;letter-spacing:.06em;text-transform:uppercase;line-height:1.1}
+.brand small{display:block;font-family:var(--mono);font-weight:400;font-size:11px;letter-spacing:.08em;color:var(--muted);text-transform:none}
+.stats{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--muted)}
+.stats b{color:var(--fg);font-weight:500;font-variant-numeric:tabular-nums}
+.balance{display:flex;height:8px;width:180px;border-radius:2px;overflow:hidden;background:var(--line)}
+.balance i{display:block;height:100%}
+
+/* main */
+.main{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:12px;align-items:start}
+@media (max-width:900px){.main{grid-template-columns:minmax(0,1fr)}}
+.chart{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow:hidden;min-width:0}
+.chart-scroll{overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.chart.zoomed .chart-scroll{max-height:min(62vh,640px)}
+.chart svg{display:block;width:100%;height:auto;max-width:none}
+.zoombar{position:absolute;right:10px;top:8px;display:flex;gap:4px;z-index:2}
+.zoombar button{background:color-mix(in srgb,var(--bg) 85%,transparent);border:1px solid var(--line2);border-radius:4px;min-width:36px;height:36px;padding:0 8px;font-weight:600;cursor:pointer}
+.chart .tag{z-index:2;max-width:calc(100% - 170px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;position:absolute;left:12px;top:10px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);background:color-mix(in srgb,var(--bg) 80%,transparent);padding:3px 8px;border:1px solid var(--line2);border-radius:3px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;padding:8px 12px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+
+.planet{cursor:pointer}
+.planet text{font-family:var(--display);font-size:13px;font-weight:600;letter-spacing:.03em;fill:var(--fg);paint-order:stroke;stroke:var(--panel);stroke-width:4px}
+.planet .sub{font-family:var(--mono);font-size:10px;font-weight:400;fill:var(--muted)}
+.target-ring{fill:none;stroke:var(--accent);stroke-width:1.5;stroke-dasharray:4 3}
+.sel-ring{fill:none;stroke:var(--accent);stroke-width:2.5}
+.fight-ring{fill:none;stroke:var(--accent);stroke-width:2;animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.fight-ring{animation:none}}
+
+/* timeline */
+.timeline{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.label{font-family:var(--display);font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.chip{width:26px;height:26px;border-radius:3px;display:grid;place-items:center;font-family:var(--mono);font-size:11px;font-weight:500;color:var(--bg);cursor:default}
+.chip.w{background:var(--win)} .chip.l{background:var(--loss)}
+.chip.def{box-shadow:inset 0 0 0 2px var(--bg)}
+.empty{color:var(--faint);font-size:13px}
+.chip{cursor:pointer;border:0;padding:0}
+.chip.on{outline:2px solid var(--accent);outline-offset:1px}
+.chipinfo{font-size:12.5px;color:var(--muted);min-height:1.2em}
+button,a,.planet{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.actionbar{display:none}
+.actionbar .bar-title{font-family:var(--display);font-weight:700;font-size:16px;line-height:1.2}
+.actionbar .bar-sub{font-size:12.5px;color:var(--muted)}
+
+/* console */
+.console{background:var(--panel);border:1px solid var(--line);border-radius:6px;display:flex;flex-direction:column;min-width:0}
+.tabs{display:flex;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;background:none;border:0;border-bottom:2px solid transparent;padding:10px 4px;font-family:var(--display);font-weight:600;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);cursor:pointer}
+.tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
+.pane{padding:14px;display:flex;flex-direction:column;gap:14px;min-width:0}
+
+.card{background:var(--panel2);border:1px solid var(--line2);border-radius:5px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--accent);text-transform:uppercase}
+.h1{font-family:var(--display);font-weight:700;font-size:24px;line-height:1.15;text-wrap:balance}
+.h2{font-family:var(--display);font-weight:600;font-size:16px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;font-weight:500}
+.note{font-size:12.5px;color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+.btn{border:1px solid var(--line2);background:var(--panel);border-radius:4px;padding:8px 14px;cursor:pointer;font-weight:500}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#1b1408;font-weight:600}
+.btn.win{background:var(--win);border-color:var(--win);color:#08170f;font-weight:600;flex:1}
+.btn.loss{background:var(--loss);border-color:var(--loss);color:#1d0a07;font-weight:600;flex:1}
+.btn.small{padding:5px 10px;font-size:12.5px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.side-pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;font-weight:600;color:var(--bg)}
+
+/* setup form */
+.field{display:flex;flex-direction:column;gap:5px}
+.field > label,.field > .flabel{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.04em}
+select,input[type=number],textarea{background:var(--bg);border:1px solid var(--line2);border-radius:4px;padding:7px 9px;width:100%}
+textarea{font-family:var(--mono);font-size:11.5px;min-height:90px;resize:vertical}
+.seg{display:flex;flex-wrap:wrap;gap:4px}
+.seg button{background:var(--bg);border:1px solid var(--line2);border-radius:4px;padding:6px 10px;cursor:pointer;font-size:13px}
+.seg button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.checks{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:13px}
+.checks label{display:inline-flex;gap:6px;align-items:center;cursor:pointer}
+input[type=checkbox],input[type=range]{accent-color:var(--accent)}
+details{border:1px solid var(--line);border-radius:4px;padding:8px 10px}
+summary{cursor:pointer;font-weight:600;font-size:13px}
+.pool{display:flex;flex-direction:column;gap:10px;margin-top:10px;max-height:340px;overflow:auto}
+.pool h4{margin:0;font-family:var(--display);font-size:13px;letter-spacing:.04em}
+.pool label{display:flex;gap:8px;align-items:baseline;font-size:12.5px;padding-left:4px;cursor:pointer}
+.pool small{color:var(--faint);font-family:var(--mono);font-size:10.5px}
+.log{display:flex;flex-direction:column;gap:6px;max-height:520px;overflow:auto}
+.log div{font-size:12.5px;border-left:2px solid var(--line2);padding-left:8px}
+.log .t{font-family:var(--mono);color:var(--faint);font-size:11px;margin-right:6px}
+.maplist{margin:0;padding-left:18px;font-size:12.5px;display:flex;flex-direction:column;gap:3px}
+.maplist small{color:var(--muted)}
+.banner{border:1px solid var(--accent);border-radius:5px;padding:12px;display:flex;flex-direction:column;gap:6px}
+@media (max-width:900px){
+  .actionbar:not([hidden]){display:flex;flex-direction:column;gap:8px;position:fixed;left:0;right:0;bottom:0;z-index:10;
+    padding:10px 16px calc(10px + env(safe-area-inset-bottom, 0px));background:var(--panel2);border-top:1px solid var(--line2);box-shadow:0 -10px 28px rgba(0,0,0,.45)}
+  body.has-bar{padding-bottom:170px}
+  .btn{min-height:44px}
+  .btn.small{min-height:40px}
+  .seg button{min-height:40px}
+  .tabs button{padding:13px 4px}
+  select,input[type=number],textarea{font-size:16px}
+  .checks label{min-height:32px}
+  .pool label{min-height:30px;align-items:center}
+  .h1{font-size:21px}
+  .brand{font-size:17px}
+  .stats{margin-left:0;width:100%;justify-content:space-between}
+  .balance{width:120px}
+  .chip{width:30px;height:30px}
+}
+</style>
+</head><body>
+<div class="app">
+  <header class="top">
+    <div class="brand">Battlefront Conquest Planner<small>Star Wars Battlefront II (2005) · your installed maps</small></div>
+    <div class="stats" id="stats"></div>
+  </header>
+  <div class="main">
+    <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+      <div class="chart">
+        <div class="tag" id="mapTag"></div>
+        <div class="zoombar"><button id="zoomOut" aria-label="Zoom out">−</button><button id="zoomFit">Fit</button><button id="zoomIn" aria-label="Zoom in">+</button></div>
+        <div class="chart-scroll" id="mapScroll"><svg id="galaxy" viewBox="0 0 1000 700" role="img" aria-label="Galaxy map"></svg></div>
+        <div class="legend" id="legend"></div>
+      </div>
+      <div class="timeline">
+        <div class="label">Battle record</div>
+        <div class="chips" id="chips"></div>
+        <div class="chipinfo" id="chipInfo"></div>
+      </div>
+    </div>
+    <aside class="console">
+      <div class="tabs" role="tablist" id="tabs">
+        <button role="tab" data-tab="command">Command</button>
+        <button role="tab" data-tab="setup">Setup</button>
+        <button role="tab" data-tab="log">Log</button>
+        <button role="tab" data-tab="save">Save</button>
+      </div>
+      <div class="pane" id="pane"></div>
+    </aside>
+  </div>
+</div>
+<div class="actionbar" id="actionbar" hidden></div>
+<script>
+const MAPS = [{"key":"stock:cor1","id":"cor1","folder":"Stock","src":"stock","name":"Coruscant: Jedi Temple","planet":"cor","space":false,"eras":{"c":["con","ctf"],"g":["con","ctf","eli"],"k":["con","ctf","eli"]}},{"key":"stock:dag1","id":"dag1","folder":"Stock","src":"stock","name":"Dagobah: Swamp","planet":"dag","space":false,"eras":{"c":["con","ctf","holo","hunt","tdm"],"g":["con","ctf","holo","hunt","tdm"],"k":["con","ctf","holo","hunt","tdm"]}},{"key":"stock:dea1","id":"dea1","folder":"Stock","src":"stock","name":"Death Star: Interior","planet":"dea","space":false,"eras":{"c":["1flag","con","holo"],"g":["1flag","con","eli","holo"],"k":["1flag","con","eli","holo","hunt"]}},{"key":"stock:end1","id":"end1","folder":"Stock","src":"stock","name":"Endor: Bunker","planet":"end","space":false,"eras":{"g":["1flag","con","hunt","uber"],"k":["1flag","con","eli","hunt","uber"]}},{"key":"stock:fel1","id":"fel1","folder":"Stock","src":"stock","name":"Felucia: Marshland","planet":"fel","space":false,"eras":{"c":["1flag","con","hunt"],"g":["1flag","con","hunt"],"k":["1flag","con","hunt"]}},{"key":"stock:geo1","id":"geo1","folder":"Stock","src":"stock","name":"Geonosis: Dust Plains","planet":"geo","space":false,"eras":{"c":["con","ctf","hunt","uber","xl"],"k":["con","ctf","hunt","uber","xl"]}},{"key":"stock:hot1","id":"hot1","folder":"Stock","src":"stock","name":"Hoth: Echo Base","planet":"hot","space":false,"eras":{"g":["1flag","con","hunt","uber","xl"],"k":["1flag","con","hunt","xl"]}},{"key":"stock:kam1","id":"kam1","folder":"Stock","src":"stock","name":"Kamino: Clone Facility","planet":"kam","space":false,"eras":{"c":["1flag","con"],"g":["1flag","con"],"k":["1flag","con","hunt"]}},{"key":"stock:kas2","id":"kas2","folder":"Stock","src":"stock","name":"Kashyyyk: Beachhead","planet":"kas","space":false,"eras":{"c":["con","ctf","hunt","uber","xl"],"g":["con","ctf","xl"],"k":["con","ctf","xl"]}},{"key":"stock:mus1","id":"mus1","folder":"Stock","src":"stock","name":"Mustafar: Refinery","planet":"mus","space":false,"eras":{"c":["con","ctf","tdm"],"g":["con","ctf","eli","tdm"],"k":["con","ctf","eli","tdm"]}},{"key":"stock:myg1","id":"myg1","folder":"Stock","src":"stock","name":"Mygeeto: War-torn City","planet":"myg","space":false,"eras":{"c":["con","ctf"],"g":["con","ctf","eli"],"k":["con","ctf","eli"]}},{"key":"stock:nab2","id":"nab2","folder":"Stock","src":"stock","name":"Naboo: Theed","planet":"nab","space":false,"eras":{"c":["con","ctf","holo","hunt"],"g":["con","ctf","eli","holo"],"k":["con","ctf","eli","holo"]}},{"key":"stock:pol1","id":"pol1","folder":"Stock","src":"stock","name":"Polis Massa: Medical Facility","planet":"pol","space":false,"eras":{"c":["con","ctf"],"g":["con","ctf"],"k":["con","ctf","hunt"]}},{"key":"stock:tan1","id":"tan1","folder":"Stock","src":"stock","name":"Tantive IV: Interior","planet":"ald","space":false,"eras":{"c":["1flag","con"],"g":["1flag","con"],"k":["1flag","con","dm","hunt"]}},{"key":"stock:tat2","id":"tat2","folder":"Stock","src":"stock","name":"Tatooine: Mos Eisley","planet":"tat","space":false,"eras":{"c":["con","ctf"],"g":["con","ctf","eli","hunt"],"k":["con","ctf","eli","hunt"]}},{"key":"stock:tat3","id":"tat3","folder":"Stock","src":"stock","name":"Tatooine: Jabba's Palace","planet":"tat","space":false,"eras":{"c":["1flag","con","hunt","tdm"],"g":["1flag","con","hunt","tdm"],"k":["1flag","con","hunt","tdm"]}},{"key":"stock:uta1","id":"uta1","folder":"Stock","src":"stock","name":"Utapau: Sinkhole","planet":"uta","space":false,"eras":{"c":["1flag","con","hunt","uber"],"g":["1flag","con","hunt","uber"],"k":["1flag","con","hunt","uber"]}},{"key":"stock:yav1","id":"yav1","folder":"Stock","src":"stock","name":"Yavin 4: Temple","planet":"yav","space":false,"eras":{"c":["1flag","con"],"g":["1flag","con"],"k":["1flag","con"]}},{"key":"stock:spa1","id":"spa1","folder":"Stock","src":"stock","name":"Space Yavin","planet":"yav","space":true,"eras":{"g":["1flag","ass"]}},{"key":"stock:spa3","id":"spa3","folder":"Stock","src":"stock","name":"Space Kashyyyk","planet":"kas","space":true,"eras":{"c":["1flag","ass"]}},{"key":"stock:spa6","id":"spa6","folder":"Stock","src":"stock","name":"Space Mygeeto","planet":"myg","space":true,"eras":{"c":["1flag","ass"]}},{"key":"stock:spa7","id":"spa7","folder":"Stock","src":"stock","name":"Space Felucia","planet":"fel","space":true,"eras":{"c":["1flag","ass"]}},{"key":"stock:spa8","id":"spa8","folder":"Stock","src":"stock","name":"Space Hoth","planet":"hot","space":true,"eras":{"g":["1flag","ass"]}},{"key":"stock:spa9","id":"spa9","folder":"Stock","src":"stock","name":"Space Tatooine","planet":"tat","space":true,"eras":{"g":["1flag","ass"]}},{"key":"356:356","id":"356","folder":"356","src":"mod","name":"Space Bespin: Fueling Station","planet":"bes","space":true,"eras":{"c":["con"],"g":["con","eli"]}},{"key":"356:gsf","id":"gsf","folder":"356","src":"mod","name":"Geonosis Asteroid Ring","planet":"geo","space":false,"eras":{"g":["eli"]}},{"key":"356:k4m","id":"k4m","folder":"356","src":"mod","name":"Space Kamino (K4M)","planet":"kam","space":true,"eras":{"c":["ass"]}},{"key":"356:spa0","id":"spa0","folder":"356","src":"mod","name":"Space (No Planet)","planet":"deep","space":true,"eras":{"c":["ass"],"g":["ass"]}},{"key":"356:spa10","id":"spa10","folder":"356","src":"mod","name":"Space Geonosis (356)","planet":"geo","space":true,"eras":{"c":["ass"]}},{"key":"356:spa11","id":"spa11","folder":"356","src":"mod","name":"Space Kamino (356)","planet":"kam","space":true,"eras":{"c":["ass"]}},{"key":"356:spa12","id":"spa12","folder":"356","src":"mod","name":"Space Endor (356)","planet":"end","space":true,"eras":{"g":["ass"]}},{"key":"356:spa13","id":"spa13","folder":"356","src":"mod","name":"Space Dagobah","planet":"dag","space":true,"eras":{"g":["ass"]}},{"key":"356:spa14","id":"spa14","folder":"356","src":"mod","name":"Space Polis Massa","planet":"pol","space":true,"eras":{"g":["ass"]}},{"key":"356:spa15","id":"spa15","folder":"356","src":"mod","name":"Space Naboo","planet":"nab","space":true,"eras":{"g":["ass"]}},{"key":"356:spa2","id":"spa2","folder":"356","src":"mod","name":"Space Coruscant","planet":"cor","space":true,"eras":{"c":["ass"]}},{"key":"356:spa4","id":"spa4","folder":"356","src":"mod","name":"Space Mustafar","planet":"mus","space":true,"eras":{"c":["ass"],"g":["ass"]}},{"key":"BF1:ab1","id":"ab1","folder":"BF1","src":"mod","name":"Alderaan","planet":"ald","space":false,"eras":{"c":["1flag","con"],"g":["1flag","con","eli"],"k":["1flag","con","eli"]}},{"key":"BF1:at4","id":"at4","folder":"BF1","src":"mod","name":"Naboo: Plains","planet":"nab","space":false,"eras":{"c":["con","hunt"],"g":["con","hunt"],"k":["con"]}},{"key":"BF1:at5","id":"at5","folder":"BF1","src":"mod","name":"Kashyyyk: Docks","planet":"kas","space":false,"eras":{"c":["con","ctf","hunt","xl"],"g":["con","ctf","eli","hunt","xl"],"k":["1flag","con","ctf","eli","xl"]}},{"key":"BF1:at6","id":"at6","folder":"BF1","src":"mod","name":"Kashyyyk: Islands","planet":"kas","space":false,"eras":{"c":["1flag","con","hunt","xl"],"g":["1flag","con","eli","hunt","xl"],"k":["1flag","con","eli","xl"]}},{"key":"BF1:bs1","id":"bs1","folder":"BF1","src":"mod","name":"Bespin: Platforms (BF1 pack)","planet":"bes","space":false,"eras":{"c":["1flag","con","ctf","xl"],"g":["1flag","con","ctf","eli","xl"],"k":["1flag","con","eli","xl"]}},{"key":"BF1:bs2","id":"bs2","folder":"BF1","src":"mod","name":"Bespin: Cloud City","planet":"bes","space":false,"eras":{"c":["1flag","con","tdm"],"g":["1flag","con","eli","tdm"],"k":["1flag","con","eli","tdm","xl"]}},{"key":"BF1:cdn","id":"cdn","folder":"BF1","src":"mod","name":"Concord Dawn","planet":"cdn","space":false,"eras":{"g":["con","eli","uber"],"k":["con","eli","uber"]}},{"key":"BF1:esk","id":"esk","folder":"BF1","src":"mod","name":"Endar Spire","planet":"tar","space":false,"eras":{"c":["1flag","con","ctf"],"g":["1flag","con","ctf","eli"],"k":["1flag","con","ctf","eli"]}},{"key":"BF1:go1","id":"go1","folder":"BF1","src":"mod","name":"Geonosis: Spire","planet":"geo","space":false,"eras":{"c":["con","ctf","hunt","uber","xl"],"k":["1flag","con","eli","uber","xl"]}},{"key":"BF1:har","id":"har","folder":"BF1","src":"mod","name":"Haruun Kal","planet":"har","space":false,"eras":{"c":["con","uber"],"g":["con","uber"],"k":["con","uber"]}},{"key":"BF1:ibn","id":"ibn","folder":"BF1","src":"mod","name":"Ord Ibanna","planet":"ibn","space":false,"eras":{"c":["con"],"g":["con","eli"],"k":["con","eli"]}},{"key":"BF1:km1","id":"km1","folder":"BF1","src":"mod","name":"Kamino: Tipoca City","planet":"kam","space":false,"eras":{"c":["1flag","con","hunt","xl"],"g":["1flag","con","xl"],"k":["1flag","con","xl"]}},{"key":"BF1:mth","id":"mth","folder":"BF1","src":"mod","name":"Methlyn","planet":"mth","space":false,"eras":{"c":["con","ctf","uber"],"g":["con","ctf","eli","uber"],"k":["con","ctf","eli","uber"]}},{"key":"BF1:npt","id":"npt","folder":"BF1","src":"mod","name":"Naboo: Prototype","planet":"nab","space":false,"eras":{"c":["1flag","con"],"g":["1flag","con"],"k":["1flag","con","eli"]}},{"key":"BF1:rat","id":"rat","folder":"BF1","src":"mod","name":"Rattatak","planet":"rat","space":false,"eras":{"c":["con","hunt","xl"],"g":["con","eli","hunt","xl"],"k":["con","ctf","eli","uber","xl"]}},{"key":"BF1:rax","id":"rax","folder":"BF1","src":"mod","name":"Raxus Prime","planet":"rax","space":false,"eras":{"c":["con","ctf","uber"],"g":["con","ctf","eli","uber"],"k":["con","ctf","eli","uber"]}},{"key":"BF1:rh1","id":"rh1","folder":"BF1","src":"mod","name":"Rhen Var: Harbor","planet":"rhv","space":false,"eras":{"c":["con","ctf","uber","xl"],"g":["con","ctf","eli","uber","xl"],"k":["1flag","con","ctf","eli","xl"]}},{"key":"BF1:rnv","id":"rnv","folder":"BF1","src":"mod","name":"Rhen Var: Citadel","planet":"rhv","space":false,"eras":{"c":["1flag","con","xl"],"g":["1flag","con","eli","xl"],"k":["1flag","con","ctf","eli","xl"]}},{"key":"BF1:s07","id":"s07","folder":"BF1","src":"mod","name":"Space Bespin (BF1 pack)","planet":"bes","space":true,"eras":{"g":["1flag","ass"]}},{"key":"BF1:s10","id":"s10","folder":"BF1","src":"mod","name":"Space Geonosis (BF1 pack)","planet":"geo","space":true,"eras":{"c":["1flag","ass"]}},{"key":"BF1:s14","id":"s14","folder":"BF1","src":"mod","name":"Space Rhen Var","planet":"rhv","space":true,"eras":{"c":["1flag","ass"]}},{"key":"BF1:sen","id":"sen","folder":"BF1","src":"mod","name":"Space Endor (BF1 pack)","planet":"end","space":true,"eras":{"g":["1flag","ass"]}},{"key":"BF1:srp","id":"srp","folder":"BF1","src":"mod","name":"Space Rakata Prime","planet":"rak","space":true,"eras":{"k":["ass"]}},{"key":"BF1:ta1","id":"ta1","folder":"BF1","src":"mod","name":"Tatooine: Dune Sea","planet":"tat","space":false,"eras":{"c":["con","hunt","xl"],"g":["con","eli","hunt","xl"],"k":["1flag","con","ctf","eli","hunt","xl"]}},{"key":"BF1:yv2","id":"yv2","folder":"BF1","src":"mod","name":"Yavin 4: Arena","planet":"yav","space":false,"eras":{"c":["1flag","con","ctf","xl"],"g":["1flag","con","ctf","eli","xl"],"k":["1flag","con","ctf","eli","xl"]}},{"key":"BS1:bs1","id":"bs1","folder":"BS1","src":"mod","name":"Bespin: Platforms (HD)","planet":"bes","space":false,"eras":{"c":["con"],"g":["con","eli"]}},{"key":"GEC:gec","id":"gec","folder":"GEC","src":"mod","name":"Geonosis: Canyon","planet":"geo","space":false,"eras":{"c":["con"],"g":["con"]}},{"key":"HF2:hf2","id":"hf2","folder":"HF2","src":"mod","name":"Tatooine: Sandstorm","planet":"tat","space":false,"eras":{"c":["con"],"g":["con","eli"]}},{"key":"HF3:hf3","id":"hf3","folder":"HF3","src":"mod","name":"Saleucami Hills","planet":"sal","space":false,"eras":{"c":["con"],"g":["con","eli"]}},{"key":"KUA:kua","id":"kua","folder":"KUA","src":"mod","name":"Kuat: Driveyards","planet":"kua","space":true,"eras":{"g":["ass"]}},{"key":"RE1:re1","id":"re1","folder":"RE1","src":"mod","name":"Geonosis [Realistic]","planet":"geo","space":false,"eras":{"c":["con","hunt","xl"],"g":["con","eli"]}},{"key":"RE2:re2","id":"re2","folder":"RE2","src":"mod","name":"Hoth [Realistic]","planet":"hot","space":false,"eras":{"c":["siege"],"g":["siege"]}},{"key":"SUL:sul","id":"sul","folder":"SUL","src":"mod","name":"Sullust","planet":"sul","space":false,"eras":{"c":["con"],"g":["con","eli"]}},{"key":"TJW:tjw","id":"tjw","folder":"TJW","src":"mod","name":"Tatooine: Dune Outpost","planet":"tat","space":false,"eras":{"c":["con","ctf","hunt","xl"],"g":["con","ctf","eli","hunt","xl"]}},{"key":"YVA:yva","id":"yva","folder":"YVA","src":"mod","name":"Yavin 4: Savior's Landing","planet":"yav","space":false,"eras":{"c":["con"],"g":["con"]}},{"key":"YVB:yvb","id":"yvb","folder":"YVB","src":"mod","name":"Yavin 4: Steps of the King","planet":"yav","space":false,"eras":{"c":["con"],"g":["con"]}}];
+const PLANETS = {
+  cor:{n:"Coruscant",c:12,r:9}, kua:{n:"Kuat",c:13.9,r:10.4}, ald:{n:"Alderaan",c:13.4,r:7.4},
+  kas:{n:"Kashyyyk",c:16.4,r:9}, nab:{n:"Naboo",c:15,r:17.2}, tat:{n:"Tatooine",c:18,r:16.2},
+  geo:{n:"Geonosis",c:19.6,r:14.4}, hot:{n:"Hoth",c:11,r:18}, bes:{n:"Bespin",c:9.3,r:16.8},
+  dag:{n:"Dagobah",c:13,r:19.4}, end:{n:"Endor",c:7.4,r:15.2}, yav:{n:"Yavin 4",c:16.2,r:5.4},
+  dea:{n:"Death Star",c:14.2,r:4.2}, mus:{n:"Mustafar",c:11.8,r:21}, uta:{n:"Utapau",c:15.2,r:20.6},
+  fel:{n:"Felucia",c:18.8,r:6.2}, myg:{n:"Mygeeto",c:8,r:4}, pol:{n:"Polis Massa",c:9.4,r:20.4},
+  kam:{n:"Kamino",c:20.6,r:17.6}, sal:{n:"Saleucami",c:20.6,r:10.6}, sul:{n:"Sullust",c:13.4,r:16.6},
+  rhv:{n:"Rhen Var",c:5,r:11}, cdn:{n:"Concord Dawn",c:16.6,r:12.6}, rax:{n:"Raxus Prime",c:11.2,r:2.6},
+  rat:{n:"Rattatak",c:4,r:7.4}, har:{n:"Haruun Kal",c:5.8,r:19}, ibn:{n:"Ord Ibanna",c:8.4,r:12.4},
+  tar:{n:"Taris",c:9.2,r:6.4}, rak:{n:"Rakata Prime",c:2.4,r:3.4}, mth:{n:"Methlyn",c:21,r:13}
+};
+for (const p of Object.values(PLANETS)) { p.x = 20 + p.c*44; p.y = 10 + p.r*31; }
+const pname = (p)=> p==="deep" ? "Deep space (fleet clashes)" : PLANETS[p].n;
+
+const ERAS = {
+  c:{name:"Clone Wars", sides:["Republic","CIS"], caps:["cor","geo"]},
+  g:{name:"Galactic Civil War", sides:["Rebel Alliance","Galactic Empire"], caps:["hot","cor"]},
+  k:{name:"Old Republic (BF1 pack era)", sides:["Republic","Sith Empire"], caps:["cor","rak"]}
+};
+const MODES = {
+  con:["Conquest",4], ctf:["2-Flag CTF",1], "1flag":["1-Flag CTF",1], ass:["Space Assault",4],
+  xl:["Conquest XL",2], hunt:["Hunt",1], eli:["Hero Assault",1], uber:["Uber Mode",1],
+  tdm:["Team Deathmatch",1], dm:["Deathmatch",1], holo:["Holocron",1], koh:["King of the Hill",1],
+  siege:["Siege",3], obj:["Objective",1]
+};
+const modeName = (x)=> MODES[x] ? MODES[x][0] : x;
+const DEFAULT_MODES = ["con","ctf","1flag","ass","xl","uber","siege"];
+const AGGR = {low:["Low — attacks about 1 turn in 3",.34], normal:["Normal — attacks most turns",.67], high:["High — attacks every turn",1]};
+const RESPAWN = 3;
+const ORD = ["1st","2nd"];
+
+const KEY = "bf2-conquest-planner.v1";
+const defaultSetup = () => ({era:"c", side:0, start:"front", youN:4, foeN:12, fleets:1, aggr:"normal", orbital:true,
+  victory:"capital", turnLimit:0, aiExpand:true, stock:true, mods:true, modes:[...DEFAULT_MODES],
+  excluded:["356:spa11","BF1:bs1"], custom:{}});
+
+let S = {setup:defaultSetup(), game:null, undo:[], tab:"setup", selected:null, fleetSel:null, confirmReplace:false, confirmReset:false, chip:null};
+const ZOOMS=[0,900,1250,1600];
+let zoom = (typeof window!=="undefined" && window.innerWidth<700) ? 900 : 0, lastFocus=null;
+
+/* ---------- persistence ---------- */
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify({setup:S.setup, game:S.game, undo:S.undo.slice(-15)})); }catch(e){} }
+function load(){
+  try{ const d = JSON.parse(localStorage.getItem(KEY)||"null");
+    if(d && d.setup){ S.setup = Object.assign(defaultSetup(), d.setup); S.game = d.game||null; S.undo = d.undo||[]; S.tab = S.game ? "command":"setup"; }
+  }catch(e){}
+}
+
+/* ---------- map pool ---------- */
+const mapByKey = Object.fromEntries(MAPS.map(m=>[m.key,m]));
+function allowedModes(m, era, cfg){ return (m.eras[era]||[]).filter(x=>cfg.modes.includes(x)); }
+function candidates(pid, space, cfg, era){
+  return MAPS.filter(m=>m.planet===pid && m.space===space && (m.src==="stock"?cfg.stock:cfg.mods)
+    && !cfg.excluded.includes(m.key) && allowedModes(m, era, cfg).length);
+}
+function eligible(cfg, era){
+  return Object.keys(PLANETS).filter(p=>candidates(p,false,cfg,era).length || candidates(p,true,cfg,era).length);
+}
+const dist = (a,b)=>Math.hypot(PLANETS[a].x-PLANETS[b].x, PLANETS[a].y-PLANETS[b].y);
+function lanesFor(ids){
+  const set = new Set(), add=(a,b)=>set.add([a,b].sort().join("|"));
+  for(const a of ids){ ids.filter(b=>b!==a).sort((x,y)=>dist(a,x)-dist(a,y)).slice(0,2).forEach(b=>add(a,b)); }
+  if(ids.length){ const inT=new Set([ids[0]]);            // spanning tree guarantees every planet is reachable
+    while(inT.size<ids.length){ let best=null;
+      for(const a of inT) for(const b of ids) if(!inT.has(b) && (!best||dist(a,b)<best[2])) best=[a,b,dist(a,b)];
+      add(best[0],best[1]); inT.add(best[1]); } }
+  return [...set].map(s=>s.split("|"));
+}
+const neighbors = (pid, lanes)=>lanes.filter(l=>l.includes(pid)).map(l=>l[0]===pid?l[1]:l[0]);
+function bfs(start, ids, lanes){
+  const d={[start]:0}, q=[start];
+  while(q.length){ const a=q.shift(); for(const b of neighbors(a,lanes)) if(!(b in d)){ d[b]=d[a]+1; q.push(b);} }
+  return d;
+}
+function capitalsFor(cfg, ids){
+  const pref = ERAS[cfg.era].caps.slice(); if(cfg.side===1) pref.reverse(); // [player capital, enemy capital]
+  let you = ids.includes(pref[0]) ? pref[0] : null, foe = ids.includes(pref[1]) ? pref[1] : null;
+  if(!you) you = ids.slice().sort((a,b)=>dist(a,pref[0])-dist(b,pref[0]))[0];
+  if(!foe || foe===you) foe = ids.filter(p=>p!==you).sort((a,b)=>dist(b,you)-dist(a,you))[0];
+  return [you, foe];
+}
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function startingOwners(cfg, ids, lanes, caps, keepCustom){
+  const owner={}, d0=bfs(caps[0],ids,lanes), d1=bfs(caps[1],ids,lanes);
+  const rest=shuffle(ids.filter(p=>!caps.includes(p)));
+  const total=ids.length, nYou=Math.max(1,Math.min(cfg.youN??4,total-1)), nFoe=Math.max(1,Math.min(cfg.foeN??12,total-nYou));
+  let pool=rest.slice();
+  // front lines: each side grows outward from its capital; scattered: random picks
+  const take=(n,key)=>{ const order = cfg.start==="random" ? pool : pool.slice().sort((a,b)=>(key[a]??99)-(key[b]??99));
+    const got=order.slice(0,Math.max(0,n)); pool=pool.filter(p=>!got.includes(p)); return got; };
+  // the side with fewer planets picks first so its pocket stays around its capital
+  const youFirst = nYou<=nFoe;
+  const a1 = youFirst ? take(nYou-1,d0) : take(nFoe-1,d1);
+  const a2 = youFirst ? take(nFoe-1,d1) : take(nYou-1,d0);
+  const mine = youFirst?a1:a2, theirs = youFirst?a2:a1;
+  for(const p of ids) owner[p]=-1;
+  mine.forEach(p=>owner[p]=0); theirs.forEach(p=>owner[p]=1);
+  if(cfg.start==="custom" && keepCustom) for(const p of ids) if(p in cfg.custom) owner[p]=cfg.custom[p];
+  owner[caps[0]]=0; owner[caps[1]]=1;
+  return owner;
+}
+
+/* preview for the setup screen (stable between renders) */
+let previewCache = null;
+function preview(force){
+  const cfg=S.setup, sig=JSON.stringify([cfg.era,cfg.side,cfg.start,cfg.youN,cfg.foeN,cfg.stock,cfg.mods,cfg.modes,cfg.excluded]);
+  if(previewCache && previewCache.sig===sig && !force){
+    if(cfg.start==="custom") for(const p in cfg.custom) if(p in previewCache.owner && !previewCache.caps.includes(p)) previewCache.owner[p]=cfg.custom[p];
+    return previewCache;
+  }
+  const ids=eligible(cfg,cfg.era), lanes=lanesFor(ids), caps=capitalsFor(cfg,ids);
+  const owner=startingOwners(cfg,ids,lanes,caps,true);
+  previewCache={sig,ids,lanes,caps,owner};
+  return previewCache;
+}
+
+/* ---------- fleets ---------- */
+const fleetsOn = ()=> S.game && (S.game.cfg.fleets||0)>0;
+const fleets = ()=> (S.game && S.game.fleets) || [];
+const fleetById = (id)=> fleets().find(f=>f.id===id);
+const alive = (side)=> fleets().filter(f=>f.side===side && !f.down);
+const fleetsAt = (pid, side)=> alive(side).filter(f=>f.at===pid);
+const fleetLabel = (f)=> `${f.side===0?"Your":"Enemy"} ${f.name}`;
+function initFleets(g){
+  g.fleets=[];
+  for(const side of [0,1]){
+    const cap=g.caps[side], foeCap=g.caps[1-side];
+    const front=g.planets.filter(p=>g.owner[p]===side && p!==cap).sort((a,b)=>dist(a,foeCap)-dist(b,foeCap))[0] || cap;
+    for(let i=0;i<(g.cfg.fleets||0);i++) g.fleets.push({id:`${side}-${i}`, side, name:`${ORD[i]} Fleet`, at:i===0?cap:front, down:0});
+  }
+}
+function destroyFleet(f){
+  const g=S.game; f.down=g.turn+RESPAWN; f.at=null;
+  logMsg(`${fleetLabel(f)} was destroyed. It will be rebuilt on turn ${f.down} at a random planet its side holds.`);
+  if(S.fleetSel===f.id) S.fleetSel=null;
+}
+function retreatFleet(f){
+  const g=S.game, opts=neighbors(f.at,g.lanes).filter(n=>g.owner[n]===f.side);
+  if(opts.length){ const to=opts[Math.floor(Math.random()*opts.length)]; logMsg(`${fleetLabel(f)} retreats from ${pname(f.at)} to ${pname(to)}.`); f.at=to; }
+  else destroyFleet(f);
+}
+function respawnFleets(){
+  const g=S.game;
+  for(const f of fleets()) if(f.down && g.turn>=f.down){
+    const owned = g.planets.filter(p=>g.owner[p]===f.side), home = owned[Math.floor(Math.random()*owned.length)];
+    if(home){ f.down=0; f.at=home; logMsg(`${fleetLabel(f)} is rebuilt at ${pname(home)}.`); }
+  }
+}
+// next jump toward the nearest planet matching goal, travelling only through planets matching pass
+function stepToward(start, goal, pass){
+  const g=S.game, prev={[start]:null}, q=[start];
+  while(q.length){ const a=q.shift();
+    for(const b of neighbors(a,g.lanes)){ if(b in prev) continue; prev[b]=a;
+      if(goal(b)){ let s=b; while(prev[s]!==start) s=prev[s]; return pass(s)?s:null; }
+      if(pass(b)) q.push(b); } }
+  return null;
+}
+
+/* ---------- battles ---------- */
+function pickMap(pid, space, g){
+  let c = candidates(pid, space, g.cfg, g.era);
+  if(!c.length) return null;
+  const min = Math.min(...c.map(m=>g.uses[m.key]||0));
+  c = c.filter(m=>(g.uses[m.key]||0)===min);
+  const m = c[Math.floor(Math.random()*c.length)];
+  const modes = allowedModes(m, g.era, g.cfg);
+  let total = modes.reduce((s,x)=>s+(MODES[x]?MODES[x][1]:1),0), r=Math.random()*total, mode=modes[0];
+  for(const x of modes){ r-= (MODES[x]?MODES[x][1]:1); if(r<=0){ mode=x; break; } }
+  return {mapKey:m.key, mode};
+}
+function makeBattle(kind, pid, attacker, space, extra){
+  const g=S.game, pick=pickMap(extra&&extra.deep?"deep":pid, space, g);
+  return pick ? {kind, planet:pid, attacker, stage: space?"space":"ground", ...(extra||{}), ...pick} : null;
+}
+function launch(kind, pid, attacker, fleetId){
+  const g=S.game, hasGround=candidates(pid,false,g.cfg,g.era).length>0;
+  const native=candidates(pid,true,g.cfg,g.era).length>0;
+  const defenders = fleetsOn() ? fleetsAt(pid,1-attacker) : [];
+  const q=[];
+  if(defenders.length){
+    const deepOk = !native && candidates("deep",true,g.cfg,g.era).length>0;
+    if(native || deepOk) q.push(makeBattle(kind,pid,attacker,true,{fleetClash:true, deep:!native}));
+    else defenders.forEach(f=>retreatFleet(f));      // no space map to fight on: the defending fleet pulls back
+  } else if(native && (g.cfg.orbital || !hasGround)) q.push(makeBattle(kind,pid,attacker,true,{}));
+  if(hasGround) q.push(makeBattle(kind,pid,attacker,false,{}));
+  g.queue=q.filter(Boolean).map(b=>({...b, fleet:fleetId||null})); g.phase="battle"; g.stageCount=g.queue.length;
+  if(!g.queue.length){ logMsg(`No battle could be set up at ${pname(pid)}.`); g.phase="select"; }
+}
+function snapshot(){ S.undo.push(JSON.stringify(S.game)); if(S.undo.length>20) S.undo.shift(); }
+function logMsg(t){ S.game.log.unshift({turn:S.game.turn, t}); }
+const sideName = (i)=> i===-1 ? "Neutral" : ERAS[S.game.era].sides[i===0 ? S.game.side : 1-S.game.side];
+
+function attack(pid, fleetId){
+  snapshot(); const f=fleetById(fleetId); S.selected=null;
+  logMsg(f ? `Your ${f.name} jumps from ${pname(f.at)} to attack ${pname(pid)}.` : `You launch an attack on ${pname(pid)}.`);
+  launch("attack", pid, 0, fleetId); save(); render();
+}
+function moveFleet(pid, fleetId){
+  snapshot(); const f=fleetById(fleetId); logMsg(`Your ${f.name} moves from ${pname(f.at)} to ${pname(pid)}.`);
+  f.at=pid; S.selected=null; enemyPhase(); save(); render();
+}
+function holdPosition(){ snapshot(); S.selected=null; S.fleetSel=null; logMsg("You hold position this turn."); enemyPhase(); save(); render(); }
+
+function resolve(won){
+  snapshot();
+  const g=S.game, b=g.queue.shift(), m=mapByKey[b.mapKey];
+  g.uses[b.mapKey]=(g.uses[b.mapKey]||0)+1;
+  g.history.push({turn:g.turn, kind:b.kind, stage:b.stage, planet:b.planet, map:m.name, mode:b.mode, won, clash:!!b.fleetClash});
+  const attackerWon = b.attacker===0 ? won : !won;
+  const where = pname(b.planet), what = b.fleetClash ? "fleet battle at" : b.stage==="space" ? "space battle over" : "ground battle on";
+  logMsg(`${won?"Victory":"Defeat"} in the ${what} ${where} (${m.name}, ${modeName(b.mode)}).`);
+  if(b.fleetClash){
+    if(attackerWon) fleetsAt(b.planet,1-b.attacker).forEach(destroyFleet);
+    else { const af=fleetById(b.fleet); if(af && !af.down) destroyFleet(af); }
+  }
+  if(!attackerWon){ g.queue=[]; logMsg(b.attacker===0 ? `Attack on ${where} repelled.` : `${where} holds.`); }
+  if(!g.queue.length){
+    if(attackerWon){ const prev=g.owner[b.planet]; g.owner[b.planet]=b.attacker;
+      logMsg(b.attacker===0 ? `${where} captured${prev===-1?" from local forces":""}.` : `${where} has fallen to the ${sideName(1)}.`);
+      fleetsAt(b.planet,1-b.attacker).forEach(retreatFleet);
+      const af=fleetById(b.fleet); if(af && !af.down) af.at=b.planet;
+    }
+    if(!checkEnd()){ if(b.kind==="attack") enemyPhase(); else endRound(); }
+  }
+  save(); render();
+}
+function reroll(){
+  const g=S.game, b=g.queue[0];
+  for(let i=0;i<8;i++){ const t=pickMap(b.deep?"deep":b.planet, b.stage==="space", g);
+    if(t && (t.mapKey!==b.mapKey || t.mode!==b.mode)){ b.mapKey=t.mapKey; b.mode=t.mode; break; } }
+  save(); render();
+}
+function enemyPhase(){
+  const g=S.game, aggr=AGGR[g.cfg.aggr][1];
+  if(fleetsOn()){
+    const opts=[];
+    for(const f of alive(1)) for(const n of neighbors(f.at,g.lanes)) if(g.owner[n]===0)
+      opts.push({f, n, w:1 + (n===g.caps[0]?1:0) + (fleetsAt(n,0).length?0:1)});
+    if(opts.length && Math.random()<aggr){
+      let r=Math.random()*opts.reduce((s,o)=>s+o.w,0), pick=opts[0];
+      for(const o of opts){ r-=o.w; if(r<=0){ pick=o; break; } }
+      logMsg(`Enemy ${pick.f.name} attacks ${pname(pick.n)} from ${pname(pick.f.at)}. Defend it.`);
+      launch("defend", pick.n, 1, pick.f.id);
+      if(g.phase==="battle") return;
+    } else {
+      const movers=alive(1).filter(f=>!neighbors(f.at,g.lanes).some(n=>g.owner[n]===0));
+      let moved=false;
+      if(movers.length){ const f=movers[Math.floor(Math.random()*movers.length)];
+        const s=stepToward(f.at, p=>g.owner[p]===0, p=>g.owner[p]===1);
+        if(s){ logMsg(`Enemy ${f.name} advances to ${pname(s)}.`); f.at=s; moved=true; } }
+      if(!moved) logMsg(`The ${sideName(1)} regroup. No counterattack this turn.`);
+    }
+    endRound(); return;
+  }
+  const targets = g.planets.filter(p=>g.owner[p]===0 && neighbors(p,g.lanes).some(n=>g.owner[n]===1));
+  if(targets.length && Math.random() < aggr){
+    const w = targets.map(p=>neighbors(p,g.lanes).filter(n=>g.owner[n]===1).length + (p===g.caps[0]?1:0));
+    let r=Math.random()*w.reduce((a,b)=>a+b,0), t=targets[0];
+    for(let i=0;i<targets.length;i++){ r-=w[i]; if(r<=0){ t=targets[i]; break; } }
+    logMsg(`The ${sideName(1)} attack ${pname(t)}. Defend it.`);
+    launch("defend", t, 1, null);
+    if(g.phase==="battle") return;
+  } else logMsg(`The ${sideName(1)} regroup. No counterattack this turn.`);
+  endRound();
+}
+function endRound(){
+  const g=S.game;
+  if(g.cfg.aiExpand){
+    const opts = g.planets.filter(p=>g.owner[p]===-1 && neighbors(p,g.lanes).some(n=>g.owner[n]===1));
+    if(opts.length && Math.random()<.35){ const p=opts[Math.floor(Math.random()*opts.length)]; g.owner[p]=1; logMsg(`The ${sideName(1)} occupy ${pname(p)} unopposed.`); }
+  }
+  g.turn++; g.phase="select"; g.queue=[];
+  respawnFleets();
+  if(fleetsOn()){ const mine=alive(0); if(!fleetById(S.fleetSel) || fleetById(S.fleetSel).down) S.fleetSel = mine.length ? mine[0].id : null; }
+  if(g.cfg.turnLimit>0 && g.turn>g.cfg.turnLimit){
+    const a=count(0), b=count(1);
+    finish(a>b ? "won" : a<b ? "lost" : "draw", `Turn limit reached: ${a} planets to ${b}.`); return;
+  }
+  checkEnd();
+}
+const count = (o)=> S.game.planets.filter(p=>S.game.owner[p]===o).length;
+function checkEnd(){
+  const g=S.game;
+  if(count(1)===0) return finish("won","The enemy holds no planets.");
+  if(count(0)===0) return finish("lost","You hold no planets.");
+  if(g.cfg.victory==="capital"){
+    if(g.owner[g.caps[1]]===0) return finish("won",`You captured the enemy capital, ${pname(g.caps[1])}.`);
+    if(g.owner[g.caps[0]]===1) return finish("lost",`Your capital, ${pname(g.caps[0])}, has fallen.`);
+  }
+  return false;
+}
+function finish(result, why){ const g=S.game; g.phase="over"; g.result=result; g.why=why; g.queue=[]; logMsg(why); return true; }
+function undo(){ if(!S.undo.length) return; S.game=JSON.parse(S.undo.pop()); S.selected=null; S.fleetSel=null; save(); render(); }
+
+function startCampaign(){
+  const cfg=JSON.parse(JSON.stringify(S.setup)), pv=preview();
+  if(pv.ids.length<3) return;
+  S.game={cfg, era:cfg.era, side:cfg.side, planets:pv.ids.slice(), lanes:pv.lanes, caps:pv.caps.slice(),
+    owner:{...pv.owner}, turn:1, phase:"select", queue:[], history:[], uses:{}, log:[], result:null, fleets:[]};
+  initFleets(S.game);
+  S.undo=[]; S.selected=null; S.fleetSel=null; S.confirmReplace=false; S.chip=null; lastFocus=null;
+  logMsg(`Campaign begins: ${ERAS[cfg.era].name}. You command the ${sideName(0)} from ${pname(S.game.caps[0])}.`);
+  if(fleetsOn()) S.fleetSel=alive(0)[0]?.id||null;
+  previewCache=null; S.tab="command"; save(); render();
+}
+
+/* ---------- rendering ---------- */
+const $ = (id)=>document.getElementById(id);
+const esc = (s)=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const ownColor = (o)=> o===0?"var(--you)": o===1?"var(--foe)":"var(--neutral)";
+
+function view(){
+  if(S.tab==="setup" || !S.game){ const p=preview(); return {preview:true, ids:p.ids, lanes:p.lanes, caps:p.caps, owner:p.owner}; }
+  const g=S.game; return {preview:false, ids:g.planets, lanes:g.lanes, caps:g.caps, owner:g.owner};
+}
+// planets the player can act on right now
+function targetsNow(){
+  const g=S.game; if(!g || g.phase!=="select") return [];
+  if(fleetsOn()){
+    const f=fleetById(S.fleetSel);
+    if(f && !f.down) return neighbors(f.at,g.lanes);
+    return [...new Set(alive(0).flatMap(f=>neighbors(f.at,g.lanes)))].filter(p=>g.owner[p]!==0);
+  }
+  return g.planets.filter(p=>g.owner[p]!==0 && neighbors(p,g.lanes).some(n=>g.owner[n]===0));
+}
+const shipPath = "M-8,-5 L10,0 L-8,5 L-5,0 Z";
+function renderMap(){
+  const v=view(), svg=$("galaxy"), tg=v.preview?[]:targetsNow(), cur=(!v.preview && S.game.queue[0])?S.game.queue[0].planet:null;
+  let h=`<defs><radialGradient id="core" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="var(--accent)" stop-opacity=".16"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></radialGradient></defs>`;
+  h+=`<rect width="1000" height="700" fill="var(--panel)"/>`;
+  for(let x=64;x<1000;x+=88) h+=`<line x1="${x}" y1="0" x2="${x}" y2="700" stroke="var(--line)" stroke-width=".5" opacity=".5"/>`;
+  for(let y=41;y<700;y+=62) h+=`<line x1="0" y1="${y}" x2="1000" y2="${y}" stroke="var(--line)" stroke-width=".5" opacity=".5"/>`;
+  h+=`<ellipse cx="${PLANETS.cor.x}" cy="${PLANETS.cor.y}" rx="230" ry="190" fill="url(#core)"/>`;
+  for(const [a,b] of v.lanes){
+    const A=PLANETS[a],B=PLANETS[b], front=v.owner[a]!==v.owner[b] && v.owner[a]!==-1 && v.owner[b]!==-1;
+    h+=`<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="${front?"var(--accent)":"var(--line2)"}" stroke-width="${front?1.4:1}" ${front?'stroke-dasharray="5 4"':''} opacity="${front?.7:1}"/>`;
+  }
+  for(const p of v.ids){
+    const P=PLANETS[p], o=v.owner[p], cap=v.caps.includes(p), r=cap?11:8;
+    const era=v.preview?S.setup.era:S.game.era, cfg=v.preview?S.setup:S.game.cfg;
+    const nG=candidates(p,false,cfg,era).length, nS=candidates(p,true,cfg,era).length;
+    const sub = [nG?`${nG} ground`:"", nS?`${nS} space`:""].filter(Boolean).join(" · ");
+    h+=`<g class="planet" data-p="${p}" tabindex="0" role="button" aria-label="${esc(P.n)}">`;
+    h+=`<circle cx="${P.x}" cy="${P.y}" r="22" fill="transparent"/>`;
+    if(tg.includes(p)) h+=`<circle class="target-ring" cx="${P.x}" cy="${P.y}" r="${r+7}"/>`;
+    if(S.selected===p) h+=`<circle class="sel-ring" cx="${P.x}" cy="${P.y}" r="${r+5}"/>`;
+    if(cur===p) h+=`<circle class="fight-ring" cx="${P.x}" cy="${P.y}" r="${r+9}"/>`;
+    h+=`<circle cx="${P.x}" cy="${P.y}" r="${r}" fill="${ownColor(o)}" stroke="var(--bg)" stroke-width="2"/>`;
+    if(cap) h+=`<circle cx="${P.x}" cy="${P.y}" r="${r-5}" fill="var(--bg)"/>`;
+    const below = P.y < 640, ty = below ? P.y+r+15 : P.y-r-18;
+    h+=`<text x="${P.x}" y="${ty}" text-anchor="middle">${esc(P.n)}</text>`;
+    h+=`<text class="sub" x="${P.x}" y="${ty+12}" text-anchor="middle">${sub}</text></g>`;
+  }
+  if(!v.preview){
+    const slot={};
+    for(const f of fleets()){ if(f.down) continue;
+      const P=PLANETS[f.at], k=slot[f.at]=(slot[f.at]||0)+1, x=P.x+4+k*14, y=P.y-20;
+      const sel=S.fleetSel===f.id;
+      h+=`<g class="planet fleet" data-f="${f.id}" data-p="${f.at}" tabindex="0" role="button" aria-label="${esc(fleetLabel(f))} at ${esc(P.n)}" transform="translate(${x},${y})">
+        <circle r="16" fill="transparent"/>${sel?`<circle r="12" fill="none" stroke="var(--accent)" stroke-width="2"/>`:""}
+        <path d="${shipPath}" fill="${f.side===0?"var(--you)":"var(--foe)"}" stroke="var(--bg)" stroke-width="1.5"/></g>`;
+    }
+  }
+  svg.innerHTML=h;
+  $("mapTag").textContent = v.preview ? (S.setup.start==="custom" ? "Preview · click planets to set owners" : "Preview of new campaign") : `Turn ${S.game.turn} · ${ERAS[S.game.era].name}`;
+  const sides = v.preview ? (()=>{const s=ERAS[S.setup.era].sides; return S.setup.side===0?s:[s[1],s[0]];})() : [sideName(0),sideName(1)];
+  const ship=(c)=>`<svg width="18" height="12" viewBox="-10 -6 20 12" aria-hidden="true"><path d="${shipPath}" fill="${c}"/></svg>`;
+  $("legend").innerHTML = `<span><i class="dot" style="background:var(--you)"></i>You · ${esc(sides[0])}</span><span><i class="dot" style="background:var(--foe)"></i>${esc(sides[1])}</span><span><i class="dot" style="background:var(--neutral)"></i>Neutral</span><span><i class="dot" style="background:var(--bg);box-shadow:0 0 0 3px var(--muted)"></i>Capital</span>${!v.preview&&fleetsOn()?`<span>${ship("var(--you)")}${ship("var(--foe)")} Fleets</span>`:""}${v.preview?"":`<span><i class="dot" style="border:1.5px dashed var(--accent)"></i>Can move or attack</span>`}`;
+}
+function renderStats(){
+  const el=$("stats");
+  if(!S.game){ el.innerHTML=`<span>No campaign yet</span>`; return; }
+  const g=S.game, a=count(0), b=count(1), n=g.planets.length-a-b, w=g.history.filter(h=>h.won).length, l=g.history.length-w;
+  el.innerHTML=`<span>Turn <b>${g.turn}</b></span><span>Battles <b>${w}–${l}</b></span>
+  <span style="display:flex;align-items:center;gap:8px"><b style="color:var(--you)">${a}</b><span class="balance" aria-label="Planets held"><i style="width:${a/g.planets.length*100}%;background:var(--you)"></i><i style="width:${n/g.planets.length*100}%;background:var(--neutral)"></i><i style="width:${b/g.planets.length*100}%;background:var(--foe)"></i></span><b style="color:var(--foe)">${b}</b></span>`;
+}
+function renderChips(){
+  const el=$("chips");
+  if(!S.game || !S.game.history.length){ el.innerHTML=`<span class="empty">Wins and losses appear here as you play.</span>`; $("chipInfo").textContent=""; return; }
+  el.innerHTML=S.game.history.map((h,i)=>`<button class="chip ${h.won?"w":"l"} ${h.kind==="defend"?"def":""} ${S.chip===i?"on":""}" data-i="${i}" title="Turn ${h.turn}: ${esc(h.kind==="defend"?"Defending":"Attacking")} ${esc(pname(h.planet))} · ${esc(h.map)} · ${esc(modeName(h.mode))} · ${h.won?"Won":"Lost"}">${h.clash?"F":h.stage==="space"?"S":h.won?"W":"L"}</button>`).join("");
+  const c=S.chip!=null && S.game.history[S.chip];
+  $("chipInfo").textContent = c ? `Turn ${c.turn}: ${c.kind==="defend"?"defending":"attacking"} ${pname(c.planet)} · ${c.map} · ${modeName(c.mode)} · ${c.won?"won":"lost"}` : "Tap a tile for details. F = fleet battle, S = space battle.";
+}
+function planetInfo(p){
+  const g=S.game, era=g?g.era:S.setup.era, cfg=g?g.cfg:S.setup;
+  const ms=MAPS.filter(m=>m.planet===p && m.eras[era]);
+  const fought=g?g.history.filter(h=>h.planet===p):[];
+  const here=g?alive(0).concat(alive(1)).filter(f=>f.at===p):[];
+  return `<div class="card"><div class="eyebrow">${g?esc(sideName(g.owner[p]??-1)):""}${g&&g.caps.includes(p)?" · Capital":""}</div>
+    <div class="h1">${esc(pname(p))}</div>
+    ${here.length?`<div class="note">In orbit: ${here.map(f=>esc(fleetLabel(f))).join(", ")}</div>`:""}
+    <ul class="maplist">${ms.map(m=>{const am=allowedModes(m,era,cfg), off=!am.length||cfg.excluded.includes(m.key)||!(m.src==="stock"?cfg.stock:cfg.mods);
+      return `<li style="${off?"opacity:.45":""}">${esc(m.name)} <small>${m.space?"space · ":""}${(m.eras[era]).map(modeName).join(", ")}</small></li>`}).join("")||"<li>No maps for this era</li>"}</ul>
+    ${fought.length?`<div class="note">Battles here: ${fought.map(h=>h.won?"W":"L").join(" ")}</div>`:""}
+  </div>`;
+}
+function fleetPanel(){
+  const g=S.game, mine=fleets().filter(f=>f.side===0), foes=fleets().filter(f=>f.side===1);
+  const line=(f)=> f.down ? `rebuilding, back turn ${f.down}` : pname(f.at);
+  return `<div class="field"><div class="flabel">Your fleets</div><div class="row">${mine.map(f=>`<button class="btn small" data-act="fleet" data-v="${f.id}" ${f.down?"disabled":""} style="${S.fleetSel===f.id?"border-color:var(--accent);color:var(--accent)":""}">${esc(f.name)} · ${esc(line(f))}</button>`).join("")}</div>
+    <div class="note">Enemy: ${foes.map(f=>`${esc(f.name)} at ${esc(line(f))}`).join(" · ")}</div></div>`;
+}
+function renderCommand(){
+  const g=S.game;
+  if(!g) return `<div class="banner"><div class="h2">No campaign running</div><div class="note">Pick an era, a side and your map pool in Setup, then start.</div><div><button class="btn primary" data-act="tab" data-v="setup">Go to Setup</button></div></div>`;
+  let h="";
+  if(g.phase==="over"){
+    h+=`<div class="banner"><div class="eyebrow">Campaign ${g.result==="won"?"won":g.result==="lost"?"lost":"drawn"}</div><div class="h1">${g.result==="won"?"Victory":g.result==="lost"?"Defeat":"Stalemate"}</div><div class="note">${esc(g.why)}</div><div class="row"><button class="btn" data-act="undo" ${S.undo.length?"":"disabled"}>Undo last result</button><button class="btn primary" data-act="tab" data-v="setup">New campaign</button></div></div>`;
+  } else if(g.phase==="battle"){
+    const b=g.queue[0], m=mapByKey[b.mapKey], idx=g.stageCount-g.queue.length+1;
+    const you=sideName(0), role=b.attacker===0?"attacking":"defending";
+    const af=fleetById(b.fleet), stakes = b.fleetClash
+      ? `This is a fleet battle. The losing side's fleet is destroyed and rebuilt ${RESPAWN} turns later on a random planet its side holds.${g.queue.length>1?" The attacker must win it to land troops.":""} `
+      : b.stage==="space"&&g.stageCount>1 ? `The ${b.attacker===0?"you":"enemy"} must win orbit before the ground battle. ` : "";
+    h+=`<div class="card">
+      <div class="eyebrow">Turn ${g.turn} · ${b.kind==="attack"?"Your attack":"Enemy attack"}${g.stageCount>1?` · battle ${idx} of ${g.stageCount}`:""}</div>
+      <div class="h1">${b.fleetClash?"Fleet battle at ":b.stage==="space"?"Space battle over ":"Ground battle on "}${esc(pname(b.planet))}</div>
+      <dl class="kv">
+        <dt>Map</dt><dd>${esc(m.name)}</dd>
+        <dt>Era</dt><dd>${esc(ERAS[g.era].name)}</dd>
+        <dt>Mode</dt><dd>${esc(modeName(b.mode))}</dd>
+        <dt>Play as</dt><dd><span class="side-pill" style="background:var(--you)">${esc(you)}</span> <span class="note">${role}</span></dd>
+        ${af?`<dt>Attacker</dt><dd>${esc(fleetLabel(af))}</dd>`:""}
+        <dt>Folder</dt><dd style="font-family:var(--mono);font-size:12px">${esc(m.folder)} · ${esc(m.id)}</dd>
+      </dl>
+      <div class="note">${stakes}Set this up in Instant Action, play it, then record the result.</div>
+      <div class="row"><button class="btn win" data-act="won">I won</button><button class="btn loss" data-act="lost">I lost</button></div>
+      <div class="row"><button class="btn small" data-act="reroll">Different map or mode</button><button class="btn small" data-act="undo" ${S.undo.length?"":"disabled"}>Undo</button></div>
+    </div>`;
+  } else if(fleetsOn()){
+    const f=fleetById(S.fleetSel), t=targetsNow(), sel=S.selected;
+    h+=`<div class="card"><div class="eyebrow">Turn ${g.turn} · Your move</div>
+      <div class="h2">${f&&!f.down?`Where should your ${esc(f.name)} go?`:"Choose a fleet"}</div>
+      <div class="note">Move a fleet one jump. Onto your own planet it repositions; onto any other planet it attacks. An enemy fleet in orbit forces a fleet battle first.</div>
+      ${fleetPanel()}
+      ${f&&!f.down?`<div class="row">${t.map(p=>`<button class="btn small" data-act="select" data-v="${p}" style="${sel===p?"border-color:var(--accent);color:var(--accent)":""}">${esc(pname(p))}${g.owner[p]===0?" (move)":g.owner[p]===-1?" (neutral)":""}${fleetsAt(p,1).length?" · enemy fleet":""}</button>`).join("")}</div>`:""}
+      ${f&&!f.down&&sel&&t.includes(sel)?(g.owner[sel]===0
+        ?`<button class="btn primary" data-act="move" data-v="${sel}">Move ${esc(f.name)} to ${esc(pname(sel))}</button>`
+        :`<button class="btn primary" data-act="attack" data-v="${sel}">Attack ${esc(pname(sel))} with ${esc(f.name)}</button>`):""}
+      <div class="row"><button class="btn small" data-act="hold">Hold position (end turn)</button><button class="btn small" data-act="undo" ${S.undo.length?"":"disabled"}>Undo</button></div></div>`;
+  } else {
+    const t=targetsNow();
+    h+=`<div class="card"><div class="eyebrow">Turn ${g.turn} · Your move</div><div class="h2">Choose a planet to attack</div>
+      <div class="note">Planets with a dashed ring border your territory. Click one on the map, or pick from the list.</div>
+      <div class="row">${t.map(p=>`<button class="btn small" data-act="select" data-v="${p}" style="${S.selected===p?"border-color:var(--accent);color:var(--accent)":""}">${esc(pname(p))}${g.owner[p]===-1?" (neutral)":""}</button>`).join("")}</div>
+      ${S.selected&&t.includes(S.selected)?`<button class="btn primary" data-act="attack" data-v="${S.selected}">Attack ${esc(pname(S.selected))}</button>`:""}
+      <div class="row"><button class="btn small" data-act="hold">Hold position (skip attack)</button><button class="btn small" data-act="undo" ${S.undo.length?"":"disabled"}>Undo</button></div></div>`;
+  }
+  if(S.selected) h+=planetInfo(S.selected);
+  return h;
+}
+function renderSetup(){
+  const s=S.setup, sides=ERAS[s.era].sides, pv=preview();
+  const eraModes=[...new Set(MAPS.flatMap(m=>m.eras[s.era]||[]))].filter(x=>MODES[x]).sort((a,b)=>MODES[b][1]-MODES[a][1]);
+  const byPlanet={}; MAPS.filter(m=>m.eras[s.era]).forEach(m=>(byPlanet[m.planet]=byPlanet[m.planet]||[]).push(m));
+  const seg=(key,opts)=>`<div class="seg">${opts.map(([v,l])=>`<button data-act="set" data-k="${key}" data-v="${v}" aria-pressed="${String(s[key])===String(v)}">${esc(l)}</button>`).join("")}</div>`;
+  const you=s.side===0?sides[0]:sides[1], foe=s.side===0?sides[1]:sides[0];
+  const nY=pv.ids.filter(p=>pv.owner[p]===0).length, nF=pv.ids.filter(p=>pv.owner[p]===1).length, nN=pv.ids.length-nY-nF;
+  return `
+  ${S.game&&S.game.phase!=="over"?`<div class="note">A campaign is in progress. Starting a new one replaces it.</div>`:""}
+  <div class="field"><div class="flabel">Era</div>${seg("era",Object.entries(ERAS).map(([k,e])=>[k,e.name]))}</div>
+  <div class="field"><div class="flabel">Your side</div>${seg("side",[[0,sides[0]],[1,sides[1]]])}</div>
+  <div class="field"><div class="flabel">Starting territory</div>${seg("start",[["front","Front lines"],["random","Scattered"],["custom","Paint my own"]])}
+    ${s.start==="custom"?`<div class="note">Click planets on the map to cycle You → Enemy → Neutral. Capitals stay fixed.</div>`:""}</div>
+  ${s.start!=="custom"?`<div class="field"><label for="youN">${esc(you)} start with ${Math.min(s.youN,pv.ids.length-1)} planet${s.youN===1?"":"s"}</label><input id="youN" type="range" min="1" max="${pv.ids.length-1}" step="1" value="${Math.min(s.youN,pv.ids.length-1)}" data-act="num" data-k="youN"></div>
+  <div class="field"><label for="foeN">${esc(foe)} start with ${Math.min(s.foeN,pv.ids.length-1)} planet${s.foeN===1?"":"s"}</label><input id="foeN" type="range" min="1" max="${pv.ids.length-1}" step="1" value="${Math.min(s.foeN,pv.ids.length-1)}" data-act="num" data-k="foeN"></div>
+  <div class="note">Capitals count toward each side. Planets left over start neutral.</div>`:""}
+  <div class="note" style="font-family:var(--mono)"><span style="color:var(--you)">${nY} yours</span> · <span style="color:var(--foe)">${nF} enemy</span> · ${nN} neutral · ${pv.ids.length} total</div>
+  <div class="field"><div class="flabel">Fleets per side</div>${seg("fleets",[[0,"None"],[1,"1 fleet"],[2,"2 fleets"]])}
+    <div class="note">${s.fleets?`Attacks are made by moving a fleet one jump. Enemy fleets in orbit must be beaten in a space battle first, and destroyed fleets are rebuilt after ${RESPAWN} turns on a random planet their side holds.`:"Without fleets you can attack any planet that borders your territory."}</div></div>
+  <div class="field"><label for="aggr">Enemy aggression</label><select id="aggr" data-act="sel" data-k="aggr">${Object.entries(AGGR).map(([k,v])=>`<option value="${k}" ${s.aggr===k?"selected":""}>${v[0]}</option>`).join("")}</select></div>
+  <div class="field"><label for="victory">Victory condition</label><select id="victory" data-act="sel" data-k="victory"><option value="capital" ${s.victory==="capital"?"selected":""}>Capture the enemy capital</option><option value="all" ${s.victory==="all"?"selected":""}>Conquer every enemy planet</option></select></div>
+  <div class="field"><label for="turnLimit">Turn limit (0 = none)</label><input id="turnLimit" type="number" min="0" max="99" value="${s.turnLimit}" data-act="num" data-k="turnLimit"></div>
+  <div class="checks">
+    <label><input id="orbital" type="checkbox" data-act="chk" data-k="orbital" ${s.orbital?"checked":""}> Space battle before ground</label>
+    <label><input id="aiExpand" type="checkbox" data-act="chk" data-k="aiExpand" ${s.aiExpand?"checked":""}> Enemy grabs neutral planets</label>
+    <label><input id="stock" type="checkbox" data-act="chk" data-k="stock" ${s.stock?"checked":""}> Stock maps</label>
+    <label><input id="mods" type="checkbox" data-act="chk" data-k="mods" ${s.mods?"checked":""}> Mod maps</label>
+  </div>
+  <div class="field"><div class="flabel">Game modes</div><div class="checks">${eraModes.map(x=>`<label><input id="mode-${x}" type="checkbox" data-act="mode" data-v="${x}" ${s.modes.includes(x)?"checked":""}> ${MODES[x][0]}</label>`).join("")}</div></div>
+  <details><summary>Map pool (${MAPS.filter(m=>m.eras[s.era]&&!s.excluded.includes(m.key)).length} of ${MAPS.filter(m=>m.eras[s.era]).length} maps on)</summary>
+    <div class="pool">${Object.keys(byPlanet).sort((a,b)=>pname(a).localeCompare(pname(b))).map(p=>`<div><h4>${esc(pname(p))}</h4>${byPlanet[p].map(m=>`<label><input id="pool-${m.key}" type="checkbox" data-act="pool" data-v="${m.key}" ${s.excluded.includes(m.key)?"":"checked"}> <span>${esc(m.name)} <small>${m.src==="stock"?"stock":esc(m.folder)}${m.space?" · space":""}</small></span></label>`).join("")}</div>`).join("")}</div>
+  </details>
+  <div class="note">${pv.ids.length} planets in play · capitals ${esc(pv.caps[0]?pname(pv.caps[0]):"—")} (you) and ${esc(pv.caps[1]?pname(pv.caps[1]):"—")}.</div>
+  <div class="row"><button class="btn primary" data-act="start" ${pv.ids.length<3?"disabled":""}>${S.confirmReplace?"Replace current campaign":"Start campaign"}</button><button class="btn" data-act="reshuffle">Reshuffle preview</button></div>
+  ${pv.ids.length<3?`<div class="note" style="color:var(--loss)">Too few planets have maps with these settings. Turn on more modes or map sources.</div>`:""}`;
+}
+function renderLog(){
+  if(!S.game||!S.game.log.length) return `<div class="empty">The campaign log fills in as you play.</div>`;
+  return `<div class="log">${S.game.log.map(e=>`<div><span class="t">T${e.turn}</span>${esc(e.t)}</div>`).join("")}</div>`;
+}
+function renderSave(){
+  const data=JSON.stringify({setup:S.setup, game:S.game});
+  return `<div class="note">Progress saves automatically in this browser. To move a campaign to another device or keep a backup, copy the save code and paste it there.</div>
+  <div class="field"><label for="exportBox">Save code</label><textarea id="exportBox" readonly>${esc(data)}</textarea><div><button class="btn small" data-act="copy">Copy save code</button> <span class="note" id="copyMsg"></span></div></div>
+  <div class="field"><label for="importBox">Load a save code</label><textarea id="importBox" placeholder="Paste a save code here"></textarea><div><button class="btn small" data-act="import">Load</button> <span class="note" id="importMsg"></span></div></div>
+  <div><button class="btn small" data-act="reset">${S.confirmReset?"Click again to erase everything":"Erase campaign and settings"}</button></div>`;
+}
+function renderBar(){
+  const bar=$("actionbar"), g=S.game; let h="";
+  if(S.tab==="setup"){
+    const pv=preview();
+    h=`<div class="row"><button class="btn primary" style="flex:1" data-act="start" ${pv.ids.length<3?"disabled":""}>${S.confirmReplace?"Replace current campaign":"Start campaign"}</button></div>`;
+  } else if(g && g.phase==="battle" && S.tab==="command"){
+    const b=g.queue[0], m=mapByKey[b.mapKey], idx=g.stageCount-g.queue.length+1;
+    h=`<div><div class="bar-sub">Turn ${g.turn} · ${b.kind==="attack"?"Your attack":"Defending"}${g.stageCount>1?` · battle ${idx} of ${g.stageCount}`:""}</div>
+      <div class="bar-title">${esc(m.name)}</div>
+      <div class="bar-sub">${esc(modeName(b.mode))} · ${esc(ERAS[g.era].name)} · play as ${esc(sideName(0))}</div></div>
+      <div class="row"><button class="btn win" data-act="won">I won</button><button class="btn loss" data-act="lost">I lost</button></div>`;
+  } else if(g && g.phase==="select" && S.tab==="command"){
+    const t=targetsNow(), sel=S.selected, valid=sel&&t.includes(sel);
+    if(fleetsOn()){
+      const f=fleetById(S.fleetSel);
+      if(!f||f.down) h=`<div class="bar-sub">Pick a fleet to move</div><div class="row">${alive(0).map(x=>`<button class="btn small" style="flex:1" data-act="fleet" data-v="${x.id}">${esc(x.name)} · ${esc(pname(x.at))}</button>`).join("")||`<span class="bar-sub">No fleets available. Hold position to end the turn.</span>`}<button class="btn small" data-act="hold">Hold</button></div>`;
+      else if(valid) h=`<div class="row"><button class="btn primary" style="flex:1" data-act="${g.owner[sel]===0?"move":"attack"}" data-v="${sel}">${g.owner[sel]===0?`Move ${esc(f.name)} to ${esc(pname(sel))}`:`Attack ${esc(pname(sel))}`}</button><button class="btn small" data-act="clear">Cancel</button></div>`;
+      else h=`<div class="bar-sub">${esc(f.name)} at ${esc(pname(f.at))}. Tap a ringed planet to move or attack.</div><div class="row"><button class="btn small" data-act="fleet" data-v="${f.id}">Change fleet</button><button class="btn small" data-act="hold">Hold position</button></div>`;
+    } else {
+      h = valid ? `<div class="row"><button class="btn primary" style="flex:1" data-act="attack" data-v="${sel}">Attack ${esc(pname(sel))}</button><button class="btn small" data-act="clear">Cancel</button></div>`
+        : `<div class="bar-sub">Tap a ringed planet to attack it.</div><div class="row"><button class="btn small" data-act="hold">Hold position</button></div>`;
+    }
+  }
+  bar.innerHTML=h; bar.hidden=!h; document.body.classList.toggle("has-bar", !!h);
+}
+function applyZoom(){
+  const svg=$("galaxy"); svg.style.width = zoom ? zoom+"px" : "100%";
+  document.querySelector(".chart").classList.toggle("zoomed", !!zoom);
+  $("zoomFit").setAttribute("aria-pressed", String(!zoom));
+}
+function centerOn(pid, smooth){
+  const sc=$("mapScroll"), svg=$("galaxy"); if(!zoom || !PLANETS[pid]) return;
+  const k=svg.clientWidth/1000;
+  sc.scrollTo({left:PLANETS[pid].x*k - sc.clientWidth/2, top:PLANETS[pid].y*k - sc.clientHeight/2, behavior:smooth?"smooth":"auto"});
+}
+function focusPlanet(){
+  const g=S.game; if(!g || S.tab==="setup") return null;
+  if(g.phase==="battle" && g.queue[0]) return g.queue[0].planet;
+  const f=fleetById(S.fleetSel); if(f && !f.down) return f.at;
+  return null;
+}
+function render(){
+  if(!S.game && S.tab==="command") S.tab="setup";
+  applyZoom(); renderStats(); renderMap(); renderChips(); renderBar();
+  const fp=focusPlanet(); if(fp && fp!==lastFocus) centerOn(fp, true); lastFocus=fp;
+  document.querySelectorAll("#tabs button").forEach(b=>b.setAttribute("aria-selected", String(b.dataset.tab===S.tab)));
+  $("pane").innerHTML = S.tab==="setup"?renderSetup(): S.tab==="log"?renderLog(): S.tab==="save"?renderSave(): renderCommand();
+}
+
+/* ---------- events ---------- */
+function clickPlanet(p, fleetId){
+  if(S.tab==="setup" || !S.game){
+    if(S.setup.start==="custom"){ const pv=preview(); if(pv.caps.includes(p)) return;
+      const cur=pv.owner[p]; S.setup.custom[p]= cur===0?1: cur===1?-1:0; save(); render(); }
+    return;
+  }
+  const g=S.game; S.tab="command";
+  if(fleetsOn() && g.phase==="select"){
+    const f=fleetById(fleetId);
+    if(f && f.side===0){ S.fleetSel = S.fleetSel===f.id ? null : f.id; S.selected=null; render(); return; }
+    const sel=fleetById(S.fleetSel);
+    if(!(sel && !sel.down && neighbors(sel.at,g.lanes).includes(p))){
+      const mineHere=fleetsAt(p,0); if(mineHere.length && !S.selected){ S.fleetSel=mineHere[0].id; render(); return; }
+    }
+  }
+  S.selected = S.selected===p ? null : p; render();
+}
+$("galaxy").addEventListener("click",e=>{ const g=e.target.closest(".planet"); if(g) clickPlanet(g.dataset.p, g.dataset.f); });
+$("galaxy").addEventListener("keydown",e=>{ if((e.key==="Enter"||e.key===" ")){ const g=e.target.closest(".planet"); if(g){ e.preventDefault(); clickPlanet(g.dataset.p, g.dataset.f);} } });
+$("tabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return; S.tab=b.dataset.tab; S.confirmReplace=false; S.confirmReset=false; render(); });
+function onAct(e){
+  const b=e.target.closest("[data-act]"); if(!b || b.tagName==="INPUT" || b.tagName==="SELECT") return;
+  const a=b.dataset.act, v=b.dataset.v, s=S.setup;
+  if(a==="tab"){ S.tab=v; render(); }
+  else if(a==="set"){ const k=b.dataset.k; s[k]= (k==="side"||k==="fleets") ? Number(v) : v; if(k==="era"||k==="side"||(k==="start"&&v==="custom")) s.custom={}; S.confirmReplace=false; save(); render(); }
+  else if(a==="start"){ if(S.game && S.game.phase!=="over" && !S.confirmReplace){ S.confirmReplace=true; render(); return; } startCampaign(); }
+  else if(a==="reshuffle"){ preview(true); s.custom={}; render(); }
+  else if(a==="select"){ S.selected=v; render(); }
+  else if(a==="fleet"){ S.fleetSel = S.fleetSel===v ? null : v; S.selected=null; render(); }
+  else if(a==="attack") attack(v, fleetsOn()?S.fleetSel:null);
+  else if(a==="move") moveFleet(v, S.fleetSel);
+  else if(a==="hold") holdPosition();
+  else if(a==="won") resolve(true);
+  else if(a==="lost") resolve(false);
+  else if(a==="reroll") reroll();
+  else if(a==="undo") undo();
+  else if(a==="copy"){ const t=$("exportBox"); const ok=()=>{$("copyMsg").textContent="Copied.";};
+    try{ navigator.clipboard.writeText(t.value).then(ok,()=>{t.select(); $("copyMsg").textContent="Selected. Press Ctrl+C to copy.";}); }catch(err){ t.select(); $("copyMsg").textContent="Selected. Press Ctrl+C to copy."; } }
+  else if(a==="import"){ try{ const d=JSON.parse($("importBox").value); if(!d.setup) throw 0; S.setup=Object.assign(defaultSetup(),d.setup); S.game=d.game||null; S.undo=[]; previewCache=null; save(); S.tab=S.game?"command":"setup"; render(); }catch(err){ $("importMsg").textContent="That isn't a valid save code. Copy the whole code and try again."; } }
+  else if(a==="reset"){ if(!S.confirmReset){ S.confirmReset=true; render(); return; } S={setup:defaultSetup(),game:null,undo:[],tab:"setup",selected:null,fleetSel:null,confirmReplace:false,confirmReset:false,chip:null}; previewCache=null; save(); render(); }
+  else if(a==="clear"){ S.selected=null; render(); }
+}
+$("pane").addEventListener("click", onAct);
+$("actionbar").addEventListener("click", onAct);
+$("chips").addEventListener("click",e=>{ const c=e.target.closest(".chip"); if(!c) return; const i=Number(c.dataset.i); S.chip = S.chip===i?null:i; renderChips(); });
+$("zoomIn").addEventListener("click",()=>{ const i=ZOOMS.indexOf(zoom); zoom=ZOOMS[Math.min(ZOOMS.length-1,i+1)]; render(); const fp=focusPlanet()||S.selected; if(fp) centerOn(fp,false); });
+$("zoomOut").addEventListener("click",()=>{ const i=ZOOMS.indexOf(zoom); zoom=ZOOMS[Math.max(0,i-1)]; render(); const fp=focusPlanet()||S.selected; if(fp) centerOn(fp,false); });
+$("zoomFit").addEventListener("click",()=>{ zoom=0; render(); });
+$("pane").addEventListener("change",e=>{
+  const t=e.target, a=t.dataset.act, k=t.dataset.k, s=S.setup; if(!a) return;
+  if(a==="sel") s[k]=t.value;
+  else if(a==="num"){ s[k]=Math.max(0, Number(t.value)||0);
+    if(k==="youN"||k==="foeN"){ const total=preview().ids.length, other=k==="youN"?"foeN":"youN"; if(s.youN+s.foeN>total) s[other]=Math.max(1,total-s[k]); } }
+  else if(a==="chk") s[k]=t.checked;
+  else if(a==="mode"){ const v=t.dataset.v; s.modes = t.checked ? [...new Set([...s.modes,v])] : s.modes.filter(x=>x!==v); }
+  else if(a==="pool"){ const v=t.dataset.v; s.excluded = t.checked ? s.excluded.filter(x=>x!==v) : [...s.excluded,v]; }
+  S.confirmReplace=false; save(); render();
+});
+$("pane").addEventListener("input",e=>{ const t=e.target;
+  if(t.id==="youN"||t.id==="foeN"){ const sd=ERAS[S.setup.era].sides, mine=S.setup.side===0?sd[0]:sd[1], theirs=S.setup.side===0?sd[1]:sd[0];
+    t.previousElementSibling.textContent=`${t.id==="youN"?mine:theirs} start with ${t.value} planet${t.value==="1"?"":"s"}`; } });
+
+load();
+const hot=window.claude?.hot;
+if(hot?.snapshot) hot.snapshot(()=>({setup:S.setup, game:S.game, undo:S.undo, tab:S.tab}));
+const boot=(d)=>{ if(d && d.setup){ S.setup=Object.assign(defaultSetup(),d.setup); S.game=d.game||null; S.undo=d.undo||[]; S.tab=d.tab||S.tab; } render(); };
+hot?.ready ? hot.ready(boot) : boot(hot?.data ?? {});
+</script></body></html>
